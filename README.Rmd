@@ -1,0 +1,159 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%"
+)
+```
+
+# docalltest
+
+exploring alternatives to do.call()
+
+We showcase a few functions that can be used instead of `do.call()`, taking as a base
+the examples in this article:  https://rpubs.com/hadley/do-call2. 
+
+In this order:
+
+* We show the syntax
+* We provide the definitions
+* We compare performance
+* We compare error and trace
+
+## syntax
+
+Those are equivalent
+
+```{r, eval = FALSE}
+  # rlang
+  f_invoke1 <- function(...) rlang::invoke(g, list(diamonds))
+  f_invoke2 <- function(...) purrr::invoke(g, list(diamonds))
+  f_inject <- function(...) inject(g(!!!list(diamonds)))
+  f_exec <- function(...) exec(g, !!!list(diamonds))
+
+  # base
+  f_as.call <- function(...) eval(as.call(c(quote(g), list(diamonds))))
+  f_do.call <- function(...) do.call(g, list(diamonds))
+
+  # from this package 
+  f_unroll <- function(...) unroll(g(... = list(diamonds)))
+  f_update_dots <- function(...) {update_dots(diamonds) ; g(...)}
+  f_as_dots <- function(...) {`...` <- as_dots(list(diamonds)) ; g(...)}
+  f_make_dots <- function(...) {`...` <- make_dots(diamonds) ; g(...)}
+```
+
+## code
+
+```{r, eval = FALSE}
+make_dots <- function(...) environment()$...
+
+update_dots <- function(...) {
+  assign("...", environment()$..., parent.frame())
+}
+
+as_dots <- function(x) {
+  do.call(function(...) environment()$..., x)
+}
+
+unroll <- function(call) {
+  call <- substitute(call)
+  dots <- call[["..."]]
+  i <- which(names(call) == "...")
+  if (length(i) != 1) stop("A named `...` arg is expected once and only once")
+  call1 <- as.list(call)[1:(i-1)]
+  call2 <- eval.parent(call[["..."]])
+  l <- length(call)
+  call3 <- if (i < l) as.list(call)[(i+1):l]
+  new_call <- as.call(c(call1, call2, call3))
+  rlang::eval_bare(new_call, parent.frame())
+}
+```
+
+## performance
+
+We measure their performance using 3 different functions for `g` : 
+
+* `g <- function(...) match.call()`
+* `g <- head`
+* `g <- nrow`
+
+<a href="https://ibb.co/KqhWgH7"><img src="https://i.ibb.co/3NdcbHW/Screenshot-2022-10-12-at-14-57-44.png" alt="Screenshot-2022-10-12-at-14-57-44" border="0" /></a>
+
+## errors and trace
+
+We compare the errors, and traceback :
+
+```{r, eval = FALSE}
+library(docalltest)
+g <- function(...) stop(...)
+
+f_do.call <- function(...) {
+  do.call(g, list("an ", "error"))
+}
+f_do.call()
+#> Error in (function (...) : an error
+traceback()
+#> 4: stop(...) at #1
+#> 3: (function (...) 
+#>    stop(...))("an ", "error")
+#> 2: do.call(g, list("an ", "error")) at #2
+#> 1: f_do.call()
+
+f_unroll <- function(...) {
+  unroll(g(... = list("an ", "error")))
+}
+f_unroll()
+#> Error in g("an ", "error"): an error
+traceback()
+#> 5: stop(...) at #1
+#> 4: g("an ", "error")
+#> 3: rlang::eval_bare(new_call, parent.frame()) at main.R#29
+#> 2: unroll(g(... = list("an ", "error"))) at #2
+#> 1: f_unroll()
+
+f_update_dots <- function(...) {
+  update_dots("an ", "error")
+  g(...)
+}
+f_update_dots()
+#> Error in g(...) : an error
+traceback()
+#> 3: stop(...) at #1
+#> 2: g(...) at #3
+#> 1: f_update_dots()
+
+f_as_dots <- function(...) {
+  `...` <- as_dots(list("an ", "error"))
+  g(...)
+}
+f_as_dots()
+#> Error in g(...) : an error
+traceback()
+#> 3: stop(...) at #1
+#> 2: g(...) at #3
+#> 1: f_as_dots()
+
+f_make_dots <- function(...) {
+  `...` <- make_dots("an ", "error")
+  g(...)
+}
+f_make_dots()
+#> Error in g(...) : an error
+traceback()
+#> 3: stop(...) at #1
+#> 2: g(...) at #3
+#> 1: f_make_dots()
+```
+
+## too weird for CRAN ?
+
+* These functions themselves could be on CRAN as far as checks go.
+* Functions built with `as_dots()` and `make_dots()` will give a warning during checks though
+* `update_dots()` gives a warning only if used in a function that doesn't have `...` args
