@@ -13,3 +13,5 @@ Imports:
     ggplot2,
     purrr,
     rlang
+URL: https://github.com/moodymudskipper/docalltest
+BugReports: https://github.com/moodymudskipper/docalltest/issues
