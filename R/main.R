@@ -16,6 +16,21 @@ as_dots <- function(x) {
 }
 
 #' @export
+splice_dots <- function(call) {
+  eval_bare(eval_bare(substitute(bquote(call, splice = TRUE))), parent.frame())
+}
+
+#' @export
+expand_dots <- function() {
+  pf <- parent.frame()
+  dots_arg <- eval(substitute(alist(...), pf))$...
+  if (is.null(dots_arg)) return(invisible())
+  dots_list <- eval(dots_arg, parent.frame(2))
+  dots <- do.call(function(...) environment()$..., dots_list)
+  assign("...", dots, pf)
+}
+
+#' @export
 unroll <- function(call) {
   call <- substitute(call)
   dots <- call[["..."]]
@@ -51,17 +66,21 @@ docall_benchmark <- function() {
 
   # base
   f_as.call <- function(...) eval(as.call(c(quote(head), list(cars, n=1))))
-  f_do.call <- function(...) do.call(head, list(cars, n=1))
+  f_do.call1 <- function(...) do.call(g, list(diamonds))
+  f_do.call2 <- function(...) do.call("g", list(diamonds))
 
   # experiment
   f_unroll <- function(...) unroll(head(... = list(cars, n=1)))
   f_update_dots <- function(...) {update_dots(cars, n=1) ; head(...)}
   f_as_dots <- function(...) {`...` <- as_dots(list(cars, n=1)) ; head(...)}
   f_make_dots <- function(...) {`...` <- make_dots(cars, n=1) ; head(...)}
+  f_splice_dots <- function(...) { splice_dots(g(..(alist(diamonds))))}
 
 
   bench::mark(
+    check = FALSE,
     `rlang::invoke` =  f_invoke1(),
+    "\u001b[103msplice_dots\u001b[49m" = f_splice_dots(),
     "\u001b[103munroll\u001b[49m" =  f_unroll(),
     `purrr::invoke` =  f_invoke2(),
     `rlang::inject` =  f_inject(),
@@ -69,7 +88,8 @@ docall_benchmark <- function() {
     "\u001b[103mas_dots\u001b[49m" = f_as_dots(),
     as.call = f_as.call(),
     "\u001b[103mupdate_dots\u001b[49m" = f_update_dots(),
-    do.call = f_do.call(),
+    do.call1 = f_do.call1(),
+    do.call2 = f_do.call2(),
     "\u001b[103mmake_dots\u001b[49m" = f_make_dots(),
     min_time = Inf, max_iterations = 10000, relative = TRUE
   ) [-(10:13)]
@@ -88,17 +108,20 @@ docall_benchmark_head <- function() {
 
   # base
   f_as.call <- function(...) eval(as.call(c(quote(g), list(diamonds))))
-  f_do.call <- function(...) do.call(g, list(diamonds))
+  f_do.call1 <- function(...) do.call(g, list(diamonds))
+  f_do.call2 <- function(...) do.call("g", list(diamonds))
 
   # experiment
   f_unroll <- function(...) unroll(g(... = list(diamonds)))
   f_update_dots <- function(...) {update_dots(diamonds) ; g(...)}
   f_as_dots <- function(...) {`...` <- as_dots(list(diamonds)) ; g(...)}
   f_make_dots <- function(...) {`...` <- make_dots(diamonds) ; g(...)}
-
+  f_splice_dots <- function(...) { splice_dots(g(..(alist(diamonds))))}
 
   bench::mark(
+    check = FALSE,
     `rlang::invoke` =  f_invoke1(),
+    "\u001b[103msplice_dots\u001b[49m" = f_splice_dots(),
     "\u001b[103munroll\u001b[49m" =  f_unroll(),
     `purrr::invoke` =  f_invoke2(),
     `rlang::inject` =  f_inject(),
@@ -106,7 +129,8 @@ docall_benchmark_head <- function() {
     "\u001b[103mas_dots\u001b[49m" = f_as_dots(),
     "\u001b[103mupdate_dots\u001b[49m" = f_update_dots(),
     as.call = f_as.call(),
-    do.call = f_do.call(),
+    do.call1 = f_do.call1(),
+    do.call2 = f_do.call2(),
     "\u001b[103mmake_dots\u001b[49m" = f_make_dots(),
     min_time = Inf, max_iterations = 10000, relative = TRUE
   ) [-(10:13)]
@@ -125,27 +149,31 @@ docall_benchmark_nrow <- function() {
 
   # base
   f_as.call <- function(...) eval(as.call(c(quote(g), list(diamonds))))
-  f_do.call <- function(...) do.call(g, list(diamonds))
+  f_do.call1 <- function(...) do.call(g, list(diamonds))
+  f_do.call2 <- function(...) do.call("g", list(diamonds))
 
   # experiment
   f_unroll <- function(...) unroll(g(... = list(diamonds)))
   f_update_dots <- function(...) {update_dots(diamonds) ; g(...)}
   f_as_dots <- function(...) {`...` <- as_dots(list(diamonds)) ; g(...)}
   f_make_dots <- function(...) {`...` <- make_dots(diamonds) ; g(...)}
+  f_splice_dots <- function(...) { splice_dots(g(..(alist(diamonds))))}
 
-
-  bench::mark(check = FALSE,
-              `rlang::invoke` =  f_invoke1(),
-              "\u001b[103munroll\u001b[49m" =  f_unroll(),
-              `purrr::invoke` =  f_invoke2(),
-              `rlang::inject` =  f_inject(),
-              `rlang::exec` = f_exec(),
-              "\u001b[103mas_dots\u001b[49m" = f_as_dots(),
-              "\u001b[103mupdate_dots\u001b[49m" = f_update_dots(),
-              as.call = f_as.call(),
-              do.call = f_do.call(),
-              "\u001b[103mmake_dots\u001b[49m" = f_make_dots(),
-              min_time = Inf, max_iterations = 10000, relative = TRUE
+  bench::mark(
+    check = FALSE,
+    `rlang::invoke` =  f_invoke1(),
+    "\u001b[103msplice_dots\u001b[49m" = f_splice_dots(),
+    "\u001b[103munroll\u001b[49m" =  f_unroll(),
+    `purrr::invoke` =  f_invoke2(),
+    `rlang::inject` =  f_inject(),
+    `rlang::exec` = f_exec(),
+    "\u001b[103mas_dots\u001b[49m" = f_as_dots(),
+    "\u001b[103mupdate_dots\u001b[49m" = f_update_dots(),
+    as.call = f_as.call(),
+    do.call1 = f_do.call1(),
+    do.call2 = f_do.call2(),
+    "\u001b[103mmake_dots\u001b[49m" = f_make_dots(),
+    min_time = Inf, max_iterations = 10000, relative = TRUE
   ) [-(10:13)]
 }
 
@@ -164,17 +192,21 @@ docall_benchmark_match.call <- function() {
 
   # base
   f_as.call <- function(...) eval(as.call(c(quote(g), list(diamonds))))
-  f_do.call <- function(...) do.call(g, list(diamonds))
+  f_do.call1 <- function(...) do.call(g, list(diamonds))
+  f_do.call2 <- function(...) do.call("g", list(diamonds))
 
   # experiment
   f_unroll <- function(...) unroll(g(... = list(diamonds)))
   f_update_dots <- function(...) {update_dots(diamonds) ; g(...)}
   f_as_dots <- function(...) {`...` <- as_dots(list(diamonds)) ; g(...)}
   f_make_dots <- function(...) {`...` <- make_dots(diamonds) ; g(...)}
+  f_splice_dots <- function(...) { splice_dots(g(..(alist(diamonds))))}
 
 
-  bench::mark(check = FALSE,
+  bench::mark(
+    check = FALSE,
     `rlang::invoke` =  f_invoke1(),
+    "\u001b[103msplice_dots\u001b[49m" = f_splice_dots(),
     "\u001b[103munroll\u001b[49m" =  f_unroll(),
     `purrr::invoke` =  f_invoke2(),
     `rlang::inject` =  f_inject(),
@@ -182,7 +214,8 @@ docall_benchmark_match.call <- function() {
     `rlang::exec` = f_exec(),
     "\u001b[103mupdate_dots\u001b[49m" = f_update_dots(),
     as.call = f_as.call(),
-    do.call = f_do.call(),
+    do.call1 = f_do.call1(),
+    do.call2 = f_do.call2(),
     "\u001b[103mmake_dots\u001b[49m" = f_make_dots(),
     min_time = Inf, max_iterations = 10000, relative = TRUE
   ) [-(10:13)]
